@@ -10,8 +10,9 @@ import { Logger } from "@/shared/services/Logger"
 import { openExternal } from "@/utils/env"
 import { AuthInvalidTokenError, AuthNetworkError } from "../error/ClineError"
 import { featureFlagsService } from "../feature-flags"
+import { KeycloakAuthProvider, loadKeycloakConfig } from "./keycloak"
 import { ClineAuthProvider } from "./providers/ClineAuthProvider"
-import { LogoutReason } from "./types"
+import { AuthProvider, LogoutReason } from "./types"
 
 export type ServiceConfig = {
 	URI?: string
@@ -65,19 +66,32 @@ export class AuthService {
 	protected static instance: AuthService | null = null
 	protected _authenticated: boolean = false
 	protected _clineAuthInfo: ClineAuthInfo | null = null
-	protected _provider: ClineAuthProvider
+	protected _provider: AuthProvider
 	protected _activeAuthStatusUpdateHandlers = new Set<StreamingResponseHandler<AuthState>>()
 	protected _handlerToController = new Map<StreamingResponseHandler<AuthState>, Controller>()
 	protected _controller: Controller
 	protected _refreshPromise: Promise<string | undefined> | null = null
 
-	/**
-	 * Creates an instance of AuthService.
-	 * @param controller - Optional reference to the Controller instance.
-	 */
 	protected constructor(controller: Controller) {
-		this._provider = new ClineAuthProvider()
+		this._provider = this.createAuthProvider()
 		this._controller = controller
+	}
+
+	private createAuthProvider(): AuthProvider {
+		const authProviderType = process.env.AUTH_PROVIDER || "cline"
+
+		if (authProviderType === "keycloak") {
+			try {
+				const config = loadKeycloakConfig()
+				Logger.info("Using Keycloak auth provider")
+				return new KeycloakAuthProvider(config)
+			} catch (error) {
+				Logger.error("Failed to load Keycloak config, falling back to Cline provider:", error)
+				return new ClineAuthProvider()
+			}
+		}
+
+		return new ClineAuthProvider()
 	}
 
 	/**
@@ -121,10 +135,11 @@ export class AuthService {
 		}
 
 		if (this._provider.timeUntilExpiry(token) <= 0) {
-			// internalGetAuthToken may return stale data on network errors
-			// Verify the token is not expired after refresh - We have a pending larger refactor to prevent this
-			// This prevents 401 errors from using expired tokens
 			return null
+		}
+
+		if (this._provider.name === "keycloak") {
+			return token
 		}
 		return `workos:${token}`
 	}
@@ -149,7 +164,7 @@ export class AuthService {
 		return this._clineAuthInfo?.userInfo?.organizations
 	}
 
-	private async internalGetAuthToken(provider: ClineAuthProvider): Promise<string | null> {
+	private async internalGetAuthToken(provider: AuthProvider): Promise<string | null> {
 		try {
 			let clineAccountAuthToken = this._clineAuthInfo?.idToken
 			if (!this._clineAuthInfo || !clineAccountAuthToken || this._clineAuthInfo.provider !== provider.name) {

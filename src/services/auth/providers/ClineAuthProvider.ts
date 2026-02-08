@@ -11,6 +11,7 @@ import { fetch, getAxiosSettings } from "@/shared/net"
 import { Logger } from "@/shared/services/Logger"
 import { type ClineAccountUserInfo, type ClineAuthInfo } from "../AuthService"
 import { parseJwtPayload } from "../oca/utils/utils"
+import { AuthProvider } from "../types"
 
 interface ClineAuthApiUser {
 	subject: string | null
@@ -61,7 +62,7 @@ export interface ClineAuthApiTokenRefreshResponse {
 	data: ClineAuthResponseData
 }
 
-export class ClineAuthProvider {
+export class ClineAuthProvider implements AuthProvider {
 	readonly name = "cline"
 	private refreshRetryCount = 0
 	private lastRefreshAttempt = 0
