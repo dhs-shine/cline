@@ -343,6 +343,7 @@ const SECRETS_KEYS = [
 	"remoteLiteLlmApiKey",
 	"ocaApiKey",
 	"ocaRefreshToken",
+	"keycloak:clineAccountId",
 	"mcpOAuthSecrets",
 	"openai-codex-oauth-credentials", // JSON blob containing OAuth tokens for OpenAI Codex (ChatGPT subscription)
 ] as const
